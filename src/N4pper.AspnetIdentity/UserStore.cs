@@ -22,14 +22,14 @@ namespace N4pper.AspnetIdentity
         /// </summary>
         /// <param name="context">The <see cref="DbContext"/>.</param>
         /// <param name="describer">The <see cref="IdentityErrorDescriber"/>.</param>
-        public UserStore(DriverProvider context, IdentityErrorDescriber describer = null) : base(context, describer) { }
+        public UserStore(IdentityDriverProvider context, IdentityErrorDescriber describer = null) : base(context, describer) { }
     }
 
     /// <summary>
     /// Creates a new instance of a persistence store for the specified user type.
     /// </summary>
     /// <typeparam name="TUser">The type representing a user.</typeparam>
-    public class UserStore<TUser> : UserStore<TUser, IdentityRole, DriverProvider, string>
+    public class UserStore<TUser> : UserStore<TUser, IdentityRole, IdentityDriverProvider, string>
         where TUser : IdentityUser<string>, new()
     {
         /// <summary>
@@ -37,7 +37,7 @@ namespace N4pper.AspnetIdentity
         /// </summary>
         /// <param name="context">The <see cref="DbContext"/>.</param>
         /// <param name="describer">The <see cref="IdentityErrorDescriber"/>.</param>
-        public UserStore(DriverProvider context, IdentityErrorDescriber describer = null) : base(context, describer) { }
+        public UserStore(IdentityDriverProvider context, IdentityErrorDescriber describer = null) : base(context, describer) { }
     }
 
     /// <summary>
@@ -49,7 +49,7 @@ namespace N4pper.AspnetIdentity
     public class UserStore<TUser, TRole, TContext> : UserStore<TUser, TRole, TContext, string>
         where TUser : IdentityUser<string>
         where TRole : IdentityRole<string>
-        where TContext : DriverProvider
+        where TContext : IdentityDriverProvider
     {
         /// <summary>
         /// Constructs a new instance of <see cref="UserStore{TUser, TRole, TContext}"/>.
@@ -71,7 +71,7 @@ namespace N4pper.AspnetIdentity
         UserStoreBase<TUser, TRole, TKey>
         where TUser : IdentityUser<TKey>
         where TRole : IdentityRole<TKey>
-        where TContext : DriverProvider
+        where TContext : IdentityDriverProvider
         where TKey : IEquatable<TKey>
     {
         /// <summary>

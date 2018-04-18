@@ -23,14 +23,10 @@ namespace UnitTest
         protected override void ConfigureServices(ServiceCollection sc)
         {
             sc.AddSingleton<IConfigurationRoot>(Configuration);
-
-            sc.AddSingleton<DriverProvider, Neo4jServer_DriverProvider>();
-
+            
             sc.AddN4pper();
 
-            sc.AddTransient<IdentityErrorDescriber, IdentityErrorDescriber>();
-            sc.AddTransient<IUserStore<IdentityUser>, UserStore<IdentityUser>>();
-            sc.AddTransient<IRoleStore<IdentityRole>, RoleStore<IdentityRole>>();
+            sc.AddIdentityNeo4jStores<IdentityUser, IdentityRole, string>(new Options() { Uri = Configuration.GetConnectionString("DefaultConnection") });
 
             sc.AddTransient<Neo4jServer_DriverBuilder>(provider => new Neo4jServer_DriverBuilder(Configuration));
 
@@ -38,21 +34,6 @@ namespace UnitTest
         }
 
 
-        public class Neo4jServer_DriverProvider : DriverProvider
-        {
-            private IConfigurationRoot _conf;
-            public Neo4jServer_DriverProvider(IConfigurationRoot conf, N4pperManager manager)
-                : base(manager)
-            {
-                _conf = conf;
-            }
-
-            public override string Uri => _conf.GetConnectionString("DefaultConnection");
-
-            public override IAuthToken AuthToken => AuthTokens.None;
-
-            public override Config Config => new Config();
-        }
         public class Neo4jServer_DriverBuilder : DriverBuilder
         {
             private IConfigurationRoot _conf;

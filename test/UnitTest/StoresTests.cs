@@ -23,17 +23,17 @@ namespace UnitTest
 
         protected override void AddRoleStore(IServiceCollection services, object context = null)
         {
-            services.AddTransient<IUserStore<IdentityUser>>(provider => Fixture.GetService<IUserStore<IdentityUser>>());//(provider=>new UserStore<IdentityUser>(context as DriverProvider));
+            services.AddTransient<IUserStore<IdentityUser>>(provider => Fixture.GetService<IUserStore<IdentityUser>>());
         }
 
         protected override void AddUserStore(IServiceCollection services, object context = null)
         {
-            services.AddTransient<IRoleStore<IdentityRole>>(provider => Fixture.GetService<IRoleStore<IdentityRole>>());//(provider => new RoleStore<IdentityRole>(context as DriverProvider));
+            services.AddTransient<IRoleStore<IdentityRole>>(provider => Fixture.GetService<IRoleStore<IdentityRole>>());
         }
 
         protected override object CreateTestContext()
         {
-            return Fixture.GetService<DriverProvider>();
+            return Fixture.GetService<IdentityDriverProvider>();
         }
 
         protected override IdentityRole CreateTestRole(string roleNamePrefix = "", bool useRoleNamePrefixAsRoleName = false)

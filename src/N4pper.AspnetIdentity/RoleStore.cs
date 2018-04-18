@@ -18,7 +18,7 @@ namespace N4pper.AspnetIdentity
     /// Creates a new instance of a persistence store for roles.
     /// </summary>
     /// <typeparam name="TRole">The type of the class representing a role</typeparam>
-    public class RoleStore<TRole> : RoleStore<TRole, DriverProvider, string>
+    public class RoleStore<TRole> : RoleStore<TRole, IdentityDriverProvider, string>
         where TRole : IdentityRole<string>
     {
         /// <summary>
@@ -26,7 +26,7 @@ namespace N4pper.AspnetIdentity
         /// </summary>
         /// <param name="context">The <see cref="DbContext"/>.</param>
         /// <param name="describer">The <see cref="IdentityErrorDescriber"/>.</param>
-        public RoleStore(DriverProvider context, IdentityErrorDescriber describer = null) : base(context, describer) { }
+        public RoleStore(IdentityDriverProvider context, IdentityErrorDescriber describer = null) : base(context, describer) { }
     }
 
     /// <summary>
@@ -36,7 +36,7 @@ namespace N4pper.AspnetIdentity
     /// <typeparam name="TContext">The type of the data context class used to access the store.</typeparam>
     public class RoleStore<TRole, TContext> : RoleStore<TRole, TContext, string>
         where TRole : IdentityRole<string>
-        where TContext : DriverProvider
+        where TContext : IdentityDriverProvider
     {
         /// <summary>
         /// Constructs a new instance of <see cref="RoleStore{TRole, TContext}"/>.
@@ -60,7 +60,7 @@ namespace N4pper.AspnetIdentity
         IRoleClaimStore<TRole>
         where TRole : IdentityRole<TKey>
         where TKey : IEquatable<TKey>
-        where TContext : DriverProvider
+        where TContext : IdentityDriverProvider
     {
         /// <summary>
         /// Constructs a new instance of <see cref="RoleStore{TRole, TContext, TKey, TUserRole, TRoleClaim}"/>.
