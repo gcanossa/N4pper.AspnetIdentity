@@ -8,10 +8,6 @@ namespace N4pper.AspnetIdentity.Model
     public class IdentityClaim : IGraphEntity
     {
         public long? EntityId { get; set; }
-        /// <summary>
-        /// Gets or sets the identifier for this user claim.
-        /// </summary>
-        public virtual int Id { get; set; }
 
         /// <summary>
         /// Gets or sets the claim type for this claim.

@@ -92,15 +92,7 @@ namespace N4pper.AspnetIdentity
         /// Gets the database context for this store.
         /// </summary>
         public TContext Context { get; private set; }
-        
-        /// <summary>
-        /// Gets or sets a flag indicating if changes should be persisted after CreateAsync, UpdateAsync and DeleteAsync are called.
-        /// </summary>
-        /// <value>
-        /// True if changes should be automatically persisted, otherwise false.
-        /// </value>
-        public bool AutoSaveChanges { get; set; } = true;
-        
+                
         /// <summary>
         /// Creates the specified <paramref name="user"/> in the user store.
         /// </summary>
@@ -115,14 +107,20 @@ namespace N4pper.AspnetIdentity
             {
                 throw new ArgumentNullException(nameof(user));
             }
-            
+
             using (ISession session = Context.GetDriver().Session())
             {
-                Node n = new Node(type: typeof(TUser));
-                await session.RunAsync(
-                    $"CREATE (p{n.Labels}) " +
-                    $"SET p+=$user, p.{nameof(user.EntityId)}=id(p)",
-                    new { user });
+                Node n = new Node("p", type: typeof(TUser));
+                TUser tmp = await session.AsAsync(s=>s.ExecuteQuery<TUser>(
+                    $"CREATE {n} " +
+                    $"SET p+=$user, p.{nameof(user.EntityId)}=id(p)" +
+                    $"RETURN p",
+                    new { user = user.ExludeProperties(p => p.EntityId) }).FirstOrDefault(),
+                    cancellationToken);
+                if (tmp == null)
+                    return IdentityResult.Failed();
+                else
+                    user.EntityId = tmp.EntityId;
             }
 
             return IdentityResult.Success;
@@ -148,8 +146,8 @@ namespace N4pper.AspnetIdentity
                 Node n = new Node(type: typeof(TUser));
                 await session.RunAsync(
                     $"MATCH (p{n.Labels} {{{nameof(IdentityUser.Id)}:$user.{nameof(IdentityUser.Id)},{nameof(IdentityUser.EntityId)}:$user.{nameof(IdentityUser.EntityId)}}}) " +
-                    $"SET p+=$user, p.{nameof(user.EntityId)}=id(p)",
-                    new { user });
+                    $"SET p+=$user",
+                    new { user = user.ToPropDictionary() });
             }
 
             return IdentityResult.Success;
@@ -174,9 +172,9 @@ namespace N4pper.AspnetIdentity
             {
                 Node n = new Node(type: typeof(TUser));
                 await session.RunAsync(
-                    $"MATCH (p{n.Labels} {{{nameof(IdentityUser.Id)}:$user.{nameof(IdentityUser.Id)},{nameof(IdentityUser.EntityId)}:$user.{nameof(IdentityUser.EntityId)}}}) " +
+                    $"MATCH (p{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(IdentityUser.Id)},{nameof(IdentityUser.EntityId)}:${nameof(IdentityUser.EntityId)}}}) " +
                     $"DETACH DELETE p",
-                    new { user });
+                    user.SelectProperties(p=> new { p.Id, p.EntityId }));
             }
 
             return IdentityResult.Success;
@@ -190,22 +188,20 @@ namespace N4pper.AspnetIdentity
         /// <returns>
         /// The <see cref="Task"/> that represents the asynchronous operation, containing the user matching the specified <paramref name="userId"/> if it exists.
         /// </returns>
-        public override Task<TUser> FindByIdAsync(string userId, CancellationToken cancellationToken = default(CancellationToken))
+        public override async Task<TUser> FindByIdAsync(string userId, CancellationToken cancellationToken = default(CancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
 
-            return Task.Run<TUser>(() =>
+            using (ISession session = Context.GetDriver().Session())
             {
-                using (ISession session = Context.GetDriver().Session())
-                {
-                    Node n = new Node(type: typeof(TUser));
-                    return session.ExecuteQuery<TUser>(
-                        $"MATCH (p{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}}) " +
-                        $"RETURN p",
-                        new { userId }).FirstOrDefault();
-                }
-            }, cancellationToken);
+                Node n = new Node(type: typeof(TUser));
+                return await session.AsAsync<TUser>(p=>
+                p.ExecuteQuery<TUser>(
+                    $"MATCH (p{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}}) " +
+                    $"RETURN p",
+                    new { userId }).FirstOrDefault(), cancellationToken);
+            }
         }
 
         /// <summary>
@@ -216,22 +212,20 @@ namespace N4pper.AspnetIdentity
         /// <returns>
         /// The <see cref="Task"/> that represents the asynchronous operation, containing the user matching the specified <paramref name="normalizedUserName"/> if it exists.
         /// </returns>
-        public override Task<TUser> FindByNameAsync(string normalizedUserName, CancellationToken cancellationToken = default(CancellationToken))
+        public override async Task<TUser> FindByNameAsync(string normalizedUserName, CancellationToken cancellationToken = default(CancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
 
-            return Task.Run<TUser>(() =>
+            using (ISession session = Context.GetDriver().Session())
             {
-                using (ISession session = Context.GetDriver().Session())
-                {
-                    Node n = new Node(type: typeof(TUser));
-                    return session.ExecuteQuery<TUser>(
-                        $"MATCH (p{n.Labels} {{{nameof(IdentityUser.NormalizedUserName)}:${nameof(normalizedUserName)}}}) " +
-                        $"RETURN p",
-                        new { normalizedUserName }).FirstOrDefault();
-                }
-            }, cancellationToken);
+                Node n = new Node(type: typeof(TUser));
+                return await session.AsAsync(p=>
+                p.ExecuteQuery<TUser>(
+                    $"MATCH (p{n.Labels} {{{nameof(IdentityUser.NormalizedUserName)}:${nameof(normalizedUserName)}}}) " +
+                    $"RETURN p",
+                    new { normalizedUserName }).FirstOrDefault(), cancellationToken);
+            }
         }
 
         /// <summary>
@@ -277,7 +271,7 @@ namespace N4pper.AspnetIdentity
                 Rel rel = new Rel(type: typeof(Relationships.IsIn));
 
                 TKey userId = user.Id;
-                TKey roleId = session.ExecuteQuery<TRole>($"MATCH (r:{r.Labels} {{{nameof(IdentityRole.NormalizedName)}:${nameof(normalizedRoleName)}}}) RETURN r",new { normalizedRoleName }).Select(p=>p.Id).FirstOrDefault();
+                TKey roleId = session.ExecuteQuery<TRole>($"MATCH (r{r.Labels} {{{nameof(IdentityRole.NormalizedName)}:${nameof(normalizedRoleName)}}}) RETURN r",new { normalizedRoleName }).Select(p=>p.Id).FirstOrDefault();
                 if (roleId == null)
                 {
                     throw new InvalidOperationException(string.Format("Role '{0}' not found", normalizedRoleName));
@@ -317,7 +311,7 @@ namespace N4pper.AspnetIdentity
                 Node r = new Node(type: typeof(TRole));
 
                 TKey userId = user.Id;
-                TKey roleId = session.ExecuteQuery<TRole>($"MATCH (r:{r.Labels} {{{nameof(IdentityRole.NormalizedName)}:${nameof(normalizedRoleName)}}}) RETURN r", new { normalizedRoleName }).Select(p => p.Id).FirstOrDefault();
+                TKey roleId = session.ExecuteQuery<TRole>($"MATCH (r{r.Labels} {{{nameof(IdentityRole.NormalizedName)}:${nameof(normalizedRoleName)}}}) RETURN r", new { normalizedRoleName }).Select(p => p.Id).FirstOrDefault();
                 if (roleId == null)
                 {
                     throw new InvalidOperationException(string.Format("Role '{0}' not found", normalizedRoleName));
@@ -326,7 +320,7 @@ namespace N4pper.AspnetIdentity
                 await session.RunAsync(
                     $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})" +
                     $"-{new Rel("rel",type: typeof(Relationships.IsIn))}->" +
-                    $"MATCH (r{r.Labels} {{{nameof(IdentityRole.Id)}:${nameof(roleId)}}}) " +
+                    $"(r{r.Labels} {{{nameof(IdentityRole.Id)}:${nameof(roleId)}}}) " +
                     $"DELETE rel",
                     new { userId, roleId });
             }
@@ -347,23 +341,21 @@ namespace N4pper.AspnetIdentity
                 throw new ArgumentNullException(nameof(user));
             }
 
-            return await Task<IList<string>>.Run(() =>
+            using (ISession session = Context.GetDriver().Session())
             {
-                using (ISession session = Context.GetDriver().Session())
-                {
-                    Node n = new Node(type: typeof(TUser));
-                    Node r = new Node(type: typeof(TRole));
+                Node n = new Node(type: typeof(TUser));
+                Node r = new Node(type: typeof(TRole));
 
-                    TKey userId = user.Id;
+                TKey userId = user.Id;
 
-                    return session.ExecuteQuery<TRole>(
-                        $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})" +
-                        $"-{new Rel("rel", type: typeof(Relationships.IsIn))}->" +
-                        $"MATCH (r{r.Labels}) " +
-                        $"RETURN r",
-                        new { userId }).Select(p => p.Name).ToList();
-                }
-            }, cancellationToken);
+                return await session.AsAsync(s=>
+                s.ExecuteQuery<TRole>(
+                    $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})" +
+                    $"-{new Rel("rel", type: typeof(Relationships.IsIn))}->" +
+                    $"(r{r.Labels}) " +
+                    $"RETURN r",
+                    new { userId }).Select(p => p.Name).ToList(), cancellationToken);
+            }
         }
 
         /// <summary>
@@ -387,23 +379,21 @@ namespace N4pper.AspnetIdentity
                 throw new ArgumentException("Vaue cannot be null or empty", nameof(normalizedRoleName));
             }
 
-            return await Task<bool>.Run(() =>
+            using (ISession session = Context.GetDriver().Session())
             {
-                using (ISession session = Context.GetDriver().Session())
-                {
-                    Node n = new Node(type: typeof(TUser));
-                    Node r = new Node(type: typeof(TRole));
+                Node n = new Node(type: typeof(TUser));
+                Node r = new Node(type: typeof(TRole));
 
-                    TKey userId = user.Id;
+                TKey userId = user.Id;
 
-                    return session.ExecuteQuery<TRole>(
-                        $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})" +
-                        $"-{new Rel("rel", type: typeof(Relationships.IsIn))}->" +
-                        $"MATCH (r{r.Labels} {{{nameof(IdentityRole.NormalizedName)}:${nameof(normalizedRoleName)}}}) " +
-                        $"RETURN r",
-                        new { userId, normalizedRoleName }).Count()>0;
-                }
-            }, cancellationToken);
+                return await session.AsAsync(s=>
+                s.ExecuteQuery<TRole>(
+                    $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})" +
+                    $"-{new Rel("rel", type: typeof(Relationships.IsIn))}->" +
+                    $"(r{r.Labels} {{{nameof(IdentityRole.NormalizedName)}:${nameof(normalizedRoleName)}}}) " +
+                    $"RETURN r",
+                    new { userId, normalizedRoleName }).Count()>0, cancellationToken);
+            }
         }
 
         /// <summary>
@@ -420,23 +410,21 @@ namespace N4pper.AspnetIdentity
                 throw new ArgumentNullException(nameof(user));
             }
 
-            return await Task<IList<Claim>>.Run(() =>
+            using (ISession session = Context.GetDriver().Session())
             {
-                using (ISession session = Context.GetDriver().Session())
-                {
-                    Node n = new Node(type: typeof(TUser));
-                    Node r = new Node(type: typeof(IdentityClaim));
+                Node n = new Node(type: typeof(TUser));
+                Node r = new Node(type: typeof(IdentityClaim));
 
-                    TKey userId = user.Id;
+                TKey userId = user.Id;
 
-                    return session.ExecuteQuery<IdentityClaim>(
-                        $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})" +
-                        $"-{new Rel("rel", type: typeof(Relationships.Has))}->" +
-                        $"MATCH (r{r.Labels}) " +
-                        $"RETURN r",
-                        new { userId }).ToList().Select(p => p.ToClaim()).ToList();
-                }
-            }, cancellationToken);
+                return await session.AsAsync(s=>
+                s.ExecuteQuery<IdentityClaim>(
+                    $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})" +
+                    $"-{new Rel("rel", type: typeof(Relationships.Has))}->" +
+                    $"(r{r.Labels}) " +
+                    $"RETURN r",
+                    new { userId }).ToList().Select(p => p.ToClaim()).ToList(), cancellationToken);
+            }
         }
 
         /// <summary>
@@ -446,7 +434,7 @@ namespace N4pper.AspnetIdentity
         /// <param name="claims">The claim to add to the user.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
         /// <returns>The <see cref="Task"/> that represents the asynchronous operation.</returns>
-        public override Task AddClaimsAsync(TUser user, IEnumerable<Claim> claims, CancellationToken cancellationToken = default(CancellationToken))
+        public override async Task AddClaimsAsync(TUser user, IEnumerable<Claim> claims, CancellationToken cancellationToken = default(CancellationToken))
         {
             ThrowIfDisposed();
             if (user == null)
@@ -458,7 +446,12 @@ namespace N4pper.AspnetIdentity
                 throw new ArgumentNullException(nameof(claims));
             }
 
-            List<Claim> claimsList = claims.ToList();
+            List<IDictionary<string, object>> claimsList = claims
+                .Select(p=> {
+                    IdentityClaim iclaim = new IdentityClaim();
+                    iclaim.InitializeFromClaim(p);
+                    return iclaim;
+                    }).Select(p => p.SelectProperties(c => new { c.ClaimValue, c.ClaimType })).ToList();
             if (claimsList.Count > 0)
             {
                 using (ISession session = Context.GetDriver().Session())
@@ -469,15 +462,14 @@ namespace N4pper.AspnetIdentity
 
                     TKey userId = user.Id;
 
-                    session.RunAsync(
+                    await session.RunAsync(
                         $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}}) " +
-                        $"UNWIND $claimsList as row" +
+                        $"UNWIND ${nameof(claimsList)} as row " +
                         $"CREATE (n)-{rel}->(c{c.Labels})" +
                         $"SET c+=row, c.{nameof(IGraphEntity.EntityId)}=id(c)",
                         new { userId, claimsList });
                 }
             }
-            return Task.FromResult(false);
         }
 
         /// <summary>
@@ -521,7 +513,7 @@ namespace N4pper.AspnetIdentity
                     $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})" +
                     $"-{rel}->" +
                     $"(c{c.Labels} {{{nameof(IdentityClaim.ClaimValue)}:${nameof(oldClaimValue)},{nameof(IdentityClaim.ClaimType)}:${nameof(oldClaimType)}}}) " +
-                    $"SET c.{nameof(IdentityClaim.ClaimValue)}={nameof(newClaimValue)},c.{nameof(IdentityClaim.ClaimType)}={nameof(newClaimType)}",
+                    $"SET c.{nameof(IdentityClaim.ClaimValue)}=${nameof(newClaimValue)},c.{nameof(IdentityClaim.ClaimType)}=${nameof(newClaimType)}",
                     new { userId, oldClaimType, oldClaimValue, newClaimType, newClaimValue });
             }
         }
@@ -545,7 +537,7 @@ namespace N4pper.AspnetIdentity
                 throw new ArgumentNullException(nameof(claims));
             }
 
-            List<Claim> claimsList = claims.ToList();
+            List<IDictionary<string, object>> claimsList = claims.Select(p=>p.SelectProperties(c => new { c.Value, c.Type })).ToList();
             if (claimsList.Count > 0)
             {
                 using (ISession session = Context.GetDriver().Session())
@@ -557,7 +549,7 @@ namespace N4pper.AspnetIdentity
                     TKey userId = user.Id;
 
                     await session.RunAsync(
-                        $"UNWIND ${claimsList} as row " +
+                        $"UNWIND ${nameof(claimsList)} as row " +
                         $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})" +
                         $"-{rel}->" +
                         $"(c{c.Labels} {{{nameof(IdentityClaim.ClaimValue)}:row.{nameof(Claim.Value)},{nameof(IdentityClaim.ClaimType)}:row.{nameof(Claim.Type)}}})" +
@@ -574,7 +566,7 @@ namespace N4pper.AspnetIdentity
         /// <param name="login">The login to add to the user.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
         /// <returns>The <see cref="Task"/> that represents the asynchronous operation.</returns>
-        public override Task AddLoginAsync(TUser user, UserLoginInfo login,
+        public override async Task AddLoginAsync(TUser user, UserLoginInfo login,
             CancellationToken cancellationToken = default(CancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -595,20 +587,13 @@ namespace N4pper.AspnetIdentity
                 Rel rel = new Rel(type: typeof(Relationships.Has));
 
                 TKey userId = user.Id;
-                IdentityUserLogin obj = new IdentityUserLogin()
-                {
-                    LoginProvider = login.LoginProvider,
-                    ProviderDisplayName = login.ProviderDisplayName,
-                    ProviderKey = login.ProviderKey
-                };
 
-                session.RunAsync(
+                await session.RunAsync(
                     $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}}) " +
                     $"CREATE (n)-{rel}->(c{c.Labels})" +
-                    $"SET c+=${nameof(obj)},c.{nameof(IGraphEntity.EntityId)}=id(c)",
-                    new { userId, obj });
+                    $"SET c+=${nameof(login)},c.{nameof(IGraphEntity.EntityId)}=id(c)",
+                    new { userId, login = login.ToPropDictionary() });
             }
-            return Task.FromResult(false);
         }
 
         /// <summary>
@@ -637,9 +622,9 @@ namespace N4pper.AspnetIdentity
                 TKey userId = user.Id;
 
                 await session.RunAsync(
-                    $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})-" +
+                    $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})" +
                     $"-{rel}->" +
-                    $"(c{c.Labels} ${nameof(IdentityUserLogin.LoginProvider)}:{nameof(loginProvider)},${nameof(IdentityUserLogin.ProviderKey)}:{nameof(providerKey)})" +
+                    $"(c{c.Labels} {{{nameof(IdentityUserLogin.LoginProvider)}:${nameof(loginProvider)},{nameof(IdentityUserLogin.ProviderKey)}:${nameof(providerKey)}}})" +
                     $"DETACH DELETE c",
                     new { userId, loginProvider, providerKey });
             }
@@ -662,24 +647,23 @@ namespace N4pper.AspnetIdentity
                 throw new ArgumentNullException(nameof(user));
             }
 
-            return await Task.Run<IList<UserLoginInfo>>(() =>
+            using (ISession session = Context.GetDriver().Session())
             {
-                using (ISession session = Context.GetDriver().Session())
-                {
-                    Node n = new Node(type: typeof(TUser));
-                    Node c = new Node(type: typeof(IdentityUserLogin));
-                    Rel rel = new Rel(type: typeof(Relationships.Has));
+                Node n = new Node(type: typeof(TUser));
+                Node c = new Node(type: typeof(IdentityUserLogin));
+                Rel rel = new Rel(type: typeof(Relationships.Has));
 
-                    TKey userId = user.Id;
+                TKey userId = user.Id;
 
-                    return session.ExecuteQuery<IdentityUserLogin>(
-                        $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})-" +
-                        $"-{rel}->" +
-                        $"(c{c.Labels})" +
-                        $"RETURN c",
-                        new { userId }).ToList().Select(l => new UserLoginInfo(l.LoginProvider, l.ProviderKey, l.ProviderDisplayName)).ToList();
-                }
-            });
+                return await session.AsAsync(s=>
+                s.ExecuteQuery<IdentityUserLogin>(
+                    $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})" +
+                    $"-{rel}->" +
+                    $"(c{c.Labels})" +
+                    $"RETURN c",
+                    new { userId }).ToList().Select(l => new UserLoginInfo(l.LoginProvider, l.ProviderKey, l.ProviderDisplayName)).ToList(),
+                    cancellationToken);
+            }
         }
 
         /// <summary>
@@ -696,22 +680,22 @@ namespace N4pper.AspnetIdentity
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            return await Task.Run<TUser>(() =>
+            
+            using (ISession session = Context.GetDriver().Session())
             {
-                using (ISession session = Context.GetDriver().Session())
-                {
-                    Node n = new Node(type: typeof(TUser));
-                    Node c = new Node(type: typeof(IdentityUserLogin));
-                    Rel rel = new Rel(type: typeof(Relationships.Has));
+                Node n = new Node(type: typeof(TUser));
+                Node c = new Node(type: typeof(IdentityUserLogin));
+                Rel rel = new Rel(type: typeof(Relationships.Has));
                     
-                    return session.ExecuteQuery<TUser>(
-                        $"MATCH (n{n.Labels})-" +
-                        $"-{rel}->" +
-                        $"(c{c.Labels} ${nameof(IdentityUserLogin.LoginProvider)}:{nameof(loginProvider)},${nameof(IdentityUserLogin.ProviderKey)}:{nameof(providerKey)})" +
-                        $"RETURN c",
-                        new { loginProvider, providerKey }).FirstOrDefault();
-                }
-            });
+                return await session.AsAsync(s=>
+                s.ExecuteQuery<TUser>(
+                    $"MATCH (n{n.Labels})" +
+                    $"-{rel}->" +
+                    $"(c{c.Labels} {{{nameof(IdentityUserLogin.LoginProvider)}:${nameof(loginProvider)},{nameof(IdentityUserLogin.ProviderKey)}:${nameof(providerKey)}}})" +
+                    $"RETURN n",
+                    new { loginProvider, providerKey }).FirstOrDefault(),
+                    cancellationToken);
+            }
         }
 
         /// <summary>
@@ -722,25 +706,24 @@ namespace N4pper.AspnetIdentity
         /// <returns>
         /// The task object containing the results of the asynchronous lookup operation, the user if any associated with the specified normalized email address.
         /// </returns>
-        public override Task<TUser> FindByEmailAsync(string normalizedEmail, CancellationToken cancellationToken = default(CancellationToken))
+        public override async Task<TUser> FindByEmailAsync(string normalizedEmail, CancellationToken cancellationToken = default(CancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
 
-            return Task.Run<TUser>(() =>
+            using (ISession session = Context.GetDriver().Session())
             {
-                using (ISession session = Context.GetDriver().Session())
-                {
-                    Node n = new Node(type: typeof(TUser));
-                    Node c = new Node(type: typeof(IdentityUserLogin));
-                    Rel rel = new Rel(type: typeof(Relationships.Has));
+                Node n = new Node(type: typeof(TUser));
+                Node c = new Node(type: typeof(IdentityUserLogin));
+                Rel rel = new Rel(type: typeof(Relationships.Has));
 
-                    return session.ExecuteQuery<TUser>(
-                        $"MATCH (n{n.Labels} {nameof(IdentityUser.NormalizedEmail)}:${nameof(normalizedEmail)})" +
-                        $"RETURN c",
-                        new { normalizedEmail }).FirstOrDefault();
-                }
-            }, cancellationToken);
+                return await session.AsAsync(s=>
+                s.ExecuteQuery<TUser>(
+                    $"MATCH (n{n.Labels} {{{nameof(IdentityUser.NormalizedEmail)}:${nameof(normalizedEmail)}}})" +
+                    $"RETURN n",
+                    new { normalizedEmail }).FirstOrDefault(),
+                    cancellationToken);
+            }
         }
 
         /// <summary>
@@ -760,20 +743,19 @@ namespace N4pper.AspnetIdentity
                 throw new ArgumentNullException(nameof(claim));
             }
 
-            return await Task.Run<IList<TUser>>(() =>
+            using (ISession session = Context.GetDriver().Session())
             {
-                using (ISession session = Context.GetDriver().Session())
-                {
-                    Node n = new Node(type: typeof(TUser));
-                    Node c = new Node(type: typeof(IdentityClaim));
-                    Rel rel = new Rel(type: typeof(Relationships.Has));
+                Node n = new Node(type: typeof(TUser));
+                Node c = new Node(type: typeof(IdentityClaim));
+                Rel rel = new Rel(type: typeof(Relationships.Has));
 
-                    return session.ExecuteQuery<TUser>(
-                        $"MATCH (n{n.Labels})-{rel}-(c{c.Labels} {{{nameof(IdentityClaim.ClaimType)}:${nameof(claim.Type)},{nameof(IdentityClaim.ClaimValue)}:${nameof(claim.Value)}}})" +
-                        $"RETURN n",
-                        new { claim.Type, claim.Value }).ToList();
-                }
-            }, cancellationToken);
+                return await session.AsAsync(s=>
+                s.ExecuteQuery<TUser>(
+                    $"MATCH (n{n.Labels})-{rel}-(c{c.Labels} {{{nameof(IdentityClaim.ClaimType)}:${nameof(claim.Type)},{nameof(IdentityClaim.ClaimValue)}:${nameof(claim.Value)}}})" +
+                    $"RETURN n",
+                    new { claim.Type, claim.Value }).ToList(),
+                    cancellationToken);
+            }
         }
 
         /// <summary>
@@ -793,20 +775,19 @@ namespace N4pper.AspnetIdentity
                 throw new ArgumentNullException(nameof(normalizedRoleName));
             }
 
-            return await Task.Run<IList<TUser>>(() =>
+            using (ISession session = Context.GetDriver().Session())
             {
-                using (ISession session = Context.GetDriver().Session())
-                {
-                    Node n = new Node(type: typeof(TUser));
-                    Node c = new Node(type: typeof(TRole));
-                    Rel rel = new Rel(type: typeof(Relationships.IsIn));
+                Node n = new Node(type: typeof(TUser));
+                Node c = new Node(type: typeof(TRole));
+                Rel rel = new Rel(type: typeof(Relationships.IsIn));
 
-                    return session.ExecuteQuery<TUser>(
-                        $"MATCH (n{n.Labels})-{rel}->(c{c.Labels} {{{nameof(IdentityRole.NormalizedName)}:${nameof(normalizedRoleName)}}})" +
-                        $"RETURN n",
-                        new { normalizedRoleName }).ToList();
-                }
-            }, cancellationToken);
+                return await session.AsAsync(s=>
+                s.ExecuteQuery<TUser>(
+                    $"MATCH (n{n.Labels})-{rel}->(c{c.Labels} {{{nameof(IdentityRole.NormalizedName)}:${nameof(normalizedRoleName)}}})" +
+                    $"RETURN n",
+                    new { normalizedRoleName }).ToList(), 
+                    cancellationToken);
+            }
         }
 
 
@@ -896,22 +877,22 @@ namespace N4pper.AspnetIdentity
                 throw new ArgumentNullException(nameof(user));
             }
 
+            Node n = new Node(type: typeof(TUser));
+            Node c = new Node(type: typeof(IdentityUserToken));
+            Rel rel = new Rel(type: typeof(Relationships.Has));
+
+            TKey userId = user.Id;
+
             using (ISession session = Context.GetDriver().Session())
             {
-                Node n = new Node(type: typeof(TUser));
-                Node c = new Node(type: typeof(IdentityUserToken));
-                Rel rel = new Rel(type: typeof(Relationships.Has));
-
-                TKey userId = user.Id;
-
-                return await Task.Run<string>(() =>
-                {
-                    return session.ExecuteQuery<IdentityUserToken>(
-                        $"MATCH (p{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})" +
-                        $"-{rel}->" +
-                        $"(p{c.Labels} {{{nameof(IdentityUserToken.LoginProvider)}:${nameof(loginProvider)},{nameof(IdentityUserToken.Name)}:${nameof(name)}}})" +
-                        $"RETURN p", new { userId, loginProvider, name }).Select(p=>p.Value).FirstOrDefault();
-                }, cancellationToken);
+                return await session.AsAsync(s=>
+                s.ExecuteQuery<IdentityUserToken>(
+                    $"MATCH (p{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}})" +
+                    $"-{rel}->" +
+                    $"(c{c.Labels} {{{nameof(IdentityUserToken.LoginProvider)}:${nameof(loginProvider)},{nameof(IdentityUserToken.Name)}:${nameof(name)}}})" +
+                    $"RETURN c",
+                    new { userId, loginProvider, name }).Select(p => p.Value).FirstOrDefault(), 
+                    cancellationToken);
             }
         }
     }

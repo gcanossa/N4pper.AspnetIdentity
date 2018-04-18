@@ -82,5 +82,31 @@ namespace N4pper.AspnetIdentity.Model
         {
             return Name;
         }
+        public bool Equals(TKey obj)
+        {
+            return Id.Equals(obj);
+        }
+        public override bool Equals(object obj)
+        {
+            if (obj == null) return base.Equals(obj);
+
+            if (obj is IdentityRole)
+            {
+                IdentityRole other = obj as IdentityRole;
+                return other.Id.Equals(Id);
+            }
+            else if (obj is TKey)
+            {
+                return Equals((TKey)obj);
+            }
+            else
+            {
+                return false;
+            }
+        }
+        public override int GetHashCode()
+        {
+            return Id.GetHashCode();
+        }
     }
 }

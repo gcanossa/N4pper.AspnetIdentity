@@ -2,6 +2,7 @@
 using N4pper.AspnetIdentity.Model;
 using N4pper.QueryUtils;
 using Neo4j.Driver.V1;
+using OMnG;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -77,15 +78,7 @@ namespace N4pper.AspnetIdentity
         /// Gets the database context for this store.
         /// </summary>
         public TContext Context { get; private set; }
-        
-        /// <summary>
-        /// Gets or sets a flag indicating if changes should be persisted after CreateAsync, UpdateAsync and DeleteAsync are called.
-        /// </summary>
-        /// <value>
-        /// True if changes should be automatically persisted, otherwise false.
-        /// </value>
-        public bool AutoSaveChanges { get; set; } = true;
-        
+                
         /// <summary>
         /// Creates a new role in a store as an asynchronous operation.
         /// </summary>
@@ -103,11 +96,17 @@ namespace N4pper.AspnetIdentity
 
             using (ISession session = Context.GetDriver().Session())
             {
-                Node n = new Node(type: typeof(TRole));
-                await session.RunAsync(
-                    $"CREATE (p{n.Labels}) " +
-                    $"SET p+=$role, p.{nameof(role.EntityId)}=id(p)",
-                    new { role });
+                Node n = new Node("p",type: typeof(TRole));
+                TRole tmp = await session.AsAsync(s=>s.ExecuteQuery<TRole>(
+                    $"CREATE {n} " +
+                    $"SET p+=$role, p.{nameof(role.EntityId)}=id(p) " +
+                    $"RETURN p",
+                    new { role = role.ExludeProperties(p=>p.EntityId) }).FirstOrDefault(), 
+                    cancellationToken);
+                if (tmp == null)
+                    return IdentityResult.Failed();
+                else
+                    role.EntityId = tmp.EntityId;
             }
             return IdentityResult.Success;
         }
@@ -132,9 +131,9 @@ namespace N4pper.AspnetIdentity
             {
                 Node n = new Node(type: typeof(TRole));
                 await session.RunAsync(
-                    $"MATCH (p{n.Labels} {{{nameof(IdentityUser.Id)}:$role.{nameof(IdentityUser.Id)},{nameof(IdentityUser.EntityId)}:$role.{nameof(IdentityUser.EntityId)}}}) " +
-                    $"SET p+=$role, p.{nameof(role.EntityId)}=id(p)",
-                    new { role });
+                    $"MATCH (p{n.Labels} {{{nameof(IdentityRole.Id)}:$role.{nameof(IdentityRole.Id)},{nameof(IdentityRole.EntityId)}:$role.{nameof(IdentityRole.EntityId)}}}) " +
+                    $"SET p+=$role",
+                    new { role = role.ToPropDictionary() });
             }
             return IdentityResult.Success;
         }
@@ -157,9 +156,9 @@ namespace N4pper.AspnetIdentity
             {
                 Node n = new Node(type: typeof(TRole));
                 await session.RunAsync(
-                    $"MATCH (p{n.Labels} {{{nameof(IdentityUser.Id)}:$role.{nameof(IdentityUser.Id)},{nameof(IdentityUser.EntityId)}:$role.{nameof(IdentityUser.EntityId)}}}) " +
+                    $"MATCH (p{n.Labels} {{{nameof(IdentityRole.Id)}:$role.{nameof(IdentityRole.Id)},{nameof(IdentityRole.EntityId)}:$role.{nameof(IdentityRole.EntityId)}}}) " +
                     $"DETACH DELETE p",
-                    new { role });
+                    new { role = role.ToPropDictionary() });
             }
             return IdentityResult.Success;
         }
@@ -170,21 +169,22 @@ namespace N4pper.AspnetIdentity
         /// <param name="id">The role ID to look for.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
         /// <returns>A <see cref="Task{TResult}"/> that result of the look up.</returns>
-        public override Task<TRole> FindByIdAsync(string id, CancellationToken cancellationToken = default(CancellationToken))
+        public override async Task<TRole> FindByIdAsync(string id, CancellationToken cancellationToken = default(CancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
             var roleId = ConvertIdFromString(id);
+
+            Node n = new Node(type: typeof(TRole));
+
             using (ISession session = Context.GetDriver().Session())
             {
-                Node n = new Node(type: typeof(TRole));
-                return Task.Run<TRole>(() =>
-                {
-                    return session.ExecuteQuery<TRole>(
-                      $"MATCH (p{n.Labels} {{{nameof(IdentityRole.Id)}:${nameof(roleId)}}}) " +
-                      $"RETURN p",
-                      new { roleId }).FirstOrDefault();
-                });
+                return await session.AsAsync(s=>
+                s.ExecuteQuery<TRole>(
+                    $"MATCH (p{n.Labels} {{{nameof(IdentityRole.Id)}:${nameof(roleId)}}}) " +
+                    $"RETURN p",
+                    new { roleId }).FirstOrDefault(), 
+                    cancellationToken);
             }
         }
 
@@ -194,20 +194,21 @@ namespace N4pper.AspnetIdentity
         /// <param name="normalizedName">The normalized role name to look for.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
         /// <returns>A <see cref="Task{TResult}"/> that result of the look up.</returns>
-        public override Task<TRole> FindByNameAsync(string normalizedName, CancellationToken cancellationToken = default(CancellationToken))
+        public override async Task<TRole> FindByNameAsync(string normalizedName, CancellationToken cancellationToken = default(CancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
+
+            Node n = new Node(type: typeof(TRole));
+
             using (ISession session = Context.GetDriver().Session())
             {
-                Node n = new Node(type: typeof(TRole));
-                return Task.Run<TRole>(() =>
-                {
-                    return session.ExecuteQuery<TRole>(
-                      $"MATCH (p{n.Labels} {{{nameof(IdentityRole.NormalizedName)}:${nameof(normalizedName)}}}) " +
-                      $"RETURN p",
-                      new { normalizedName }).FirstOrDefault();
-                }, cancellationToken);
+                return await session.AsAsync(s=>
+                s.ExecuteQuery<TRole>(
+                    $"MATCH (p{n.Labels} {{{nameof(IdentityRole.NormalizedName)}:${nameof(normalizedName)}}}) " +
+                    $"RETURN p",
+                    new { normalizedName }).FirstOrDefault(), 
+                    cancellationToken);
             }
         }
                 
@@ -225,23 +226,22 @@ namespace N4pper.AspnetIdentity
                 throw new ArgumentNullException(nameof(role));
             }
 
-            return await Task<IList<Claim>>.Run(() =>
+            using (ISession session = Context.GetDriver().Session())
             {
-                using (ISession session = Context.GetDriver().Session())
-                {
-                    Node n = new Node(type: typeof(TRole));
-                    Node r = new Node(type: typeof(IdentityClaim));
+                Node n = new Node(type: typeof(TRole));
+                Node r = new Node(type: typeof(IdentityClaim));
 
-                    TKey roleId = role.Id;
+                TKey roleId = role.Id;
 
-                    return session.ExecuteQuery<IdentityClaim>(
-                        $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(roleId)}}})" +
-                        $"-{new Rel("rel", type: typeof(Relationships.Has))}->" +
-                        $"MATCH (r{r.Labels}) " +
-                        $"RETURN r",
-                        new { roleId }).ToList().Select(p => p.ToClaim()).ToList();
-                }
-            }, cancellationToken);
+                return await session.AsAsync(s=>
+                s.ExecuteQuery<IdentityClaim>(
+                    $"MATCH (n{n.Labels} {{{nameof(IdentityRole.Id)}:${nameof(roleId)}}})" +
+                    $"-{new Rel("rel", type: typeof(Relationships.Has))}->" +
+                    $"(r{r.Labels}) " +
+                    $"RETURN r",
+                    new { roleId }).ToList().Select(p => p.ToClaim()).ToList(), 
+                    cancellationToken);
+            }
         }
 
         /// <summary>
@@ -251,7 +251,7 @@ namespace N4pper.AspnetIdentity
         /// <param name="claim">The claim to add to the role.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> used to propagate notifications that the operation should be canceled.</param>
         /// <returns>The <see cref="Task"/> that represents the asynchronous operation.</returns>
-        public override Task AddClaimAsync(TRole role, Claim claim, CancellationToken cancellationToken = default(CancellationToken))
+        public override async Task AddClaimAsync(TRole role, Claim claim, CancellationToken cancellationToken = default(CancellationToken))
         {
             ThrowIfDisposed();
             if (role == null)
@@ -271,14 +271,15 @@ namespace N4pper.AspnetIdentity
 
                 TKey roleId = role.Id;
 
-                session.RunAsync(
+                IdentityClaim iclaim = new IdentityClaim();
+                iclaim.InitializeFromClaim(claim);
+
+                await session.RunAsync(
                     $"MATCH (n{n.Labels} {{{nameof(IdentityRole.Id)}:${nameof(roleId)}}}) " +
                     $"CREATE (n)-{rel}->(c{c.Labels})" +
                     $"SET c+=${nameof(claim)}, c.{nameof(IGraphEntity.EntityId)}=id(c)",
-                    new { roleId, claim });
+                    new { roleId, claim = iclaim.SelectProperties(p=>new { p.ClaimValue, p.ClaimType }) });
             }
-
-            return Task.FromResult(false);
         }
 
         /// <summary>
@@ -313,7 +314,7 @@ namespace N4pper.AspnetIdentity
                     $"-{rel}->" +
                     $"(c{c.Labels} {{{nameof(IdentityClaim.ClaimValue)}:${nameof(Claim.Value)},{nameof(IdentityClaim.ClaimType)}:${nameof(Claim.Type)}}})" +
                     $"DETACH DELETE c",
-                    new { roleId, claim });
+                    new { roleId, claim.Value, claim.Type });
             }
         }
 

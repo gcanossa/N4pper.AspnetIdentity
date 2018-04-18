@@ -2,11 +2,21 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp2.0</TargetFramework>
+    <PackageProjectUrl>https://github.com/goldenass/N4pper.Aspnetidentity</PackageProjectUrl>
+    <PackageLicenseUrl>https://github.com/goldenass/N4pper.Aspnetidentity/blob/master/LICENSE</PackageLicenseUrl>
+    <Version>0.1.0</Version>
+    <Company>asiknow.it</Company>
+    <PackageTags>neo4j identity N4pper</PackageTags>
+    <Description>AspnetCore.Identity storage providers for neo4j based on the official driver and N4pper</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Identity" Version="2.0.2" />
-    <PackageReference Include="N4pper" Version="0.1.5" />
+    <PackageReference Include="N4pper" Version="0.1.9" />
   </ItemGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="if &quot;$(ConfigurationName)&quot; == &quot;Release&quot; (&#xD;&#xA;cd &quot;$(SolutionDir)..\build&quot;&#xD;&#xA;del /F $(ProjectName).*&#xD;&#xA;cd &quot;$(ProjectDir)&quot; &#xD;&#xA;dotnet pack --output &quot;$(SolutionDir)..\build&quot;&#xD;&#xA;)" />
+  </Target>
 
 </Project>
