@@ -4,7 +4,7 @@
     <TargetFramework>netcoreapp2.0</TargetFramework>
     <PackageProjectUrl>https://github.com/goldenass/N4pper.Aspnetidentity</PackageProjectUrl>
     <PackageLicenseUrl>https://github.com/goldenass/N4pper.Aspnetidentity/blob/master/LICENSE</PackageLicenseUrl>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Company>asiknow.it</Company>
     <PackageTags>neo4j identity N4pper</PackageTags>
     <Description>AspnetCore.Identity storage providers for neo4j based on the official driver and N4pper</Description>
@@ -12,7 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Identity" Version="2.0.2" />
-    <PackageReference Include="N4pper" Version="0.1.9" />
+    <PackageReference Include="N4pper" Version="0.1.10" />
   </ItemGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
