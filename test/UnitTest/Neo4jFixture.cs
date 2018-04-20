@@ -23,10 +23,11 @@ namespace UnitTest
         protected override void ConfigureServices(ServiceCollection sc)
         {
             sc.AddSingleton<IConfigurationRoot>(Configuration);
-            
+
             sc.AddN4pper();
 
-            sc.AddIdentityNeo4jStores<IdentityUser, IdentityRole, string>(new Options() { Uri = Configuration.GetConnectionString("DefaultConnection") });
+            sc.AddIdentity<IdentityUser, IdentityRole>()
+                .UseIdentityNeo4jStores(new Options() { Uri = Configuration.GetConnectionString("DefaultConnection") });
 
             sc.AddTransient<Neo4jServer_DriverBuilder>(provider => new Neo4jServer_DriverBuilder(Configuration));
 

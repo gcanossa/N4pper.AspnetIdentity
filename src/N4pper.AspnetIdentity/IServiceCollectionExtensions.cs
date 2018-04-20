@@ -39,23 +39,20 @@ namespace N4pper.AspnetIdentity
 
         #endregion
 
-        public static IServiceCollection AddIdentityNeo4jStores<TUser, TRole, TKey>(this IServiceCollection ext, Options options)
-            where TUser : IdentityUser<TKey>, new()
-            where TRole : IdentityRole<TKey>, new()
-            where TKey : IEquatable<TKey>
+        public static IdentityBuilder UseIdentityNeo4jStores(this IdentityBuilder ext, Options options)
         {
             ext = ext ?? throw new ArgumentNullException(nameof(ext));
             options = options ?? throw new ArgumentNullException(nameof(options));
 
-            ext.AddN4pper();
+            ext.Services.AddScoped(
+                typeof(IUserStore<>).MakeGenericType(ext.UserType),
+                typeof(UserStore<,,>).MakeGenericType(ext.UserType, ext.RoleType, typeof(IdentityDriverProvider)));
+            ext.Services.AddScoped(
+                typeof(IRoleStore<>).MakeGenericType(ext.RoleType),
+                typeof(RoleStore<,>).MakeGenericType(ext.RoleType, typeof(IdentityDriverProvider)));
 
-            ext.AddTransient<IdentityErrorDescriber, IdentityErrorDescriber>();
-
-            ext.AddSingleton<IdentityDriverProvider>(provider=>new InternalDriverProvider(options.Uri, options.Token,options.Configuration, provider.GetRequiredService<N4pperManager>()));
-
-            ext.AddTransient<IUserStore<TUser>, UserStore<TUser, TRole, IdentityDriverProvider, TKey>>();
-            ext.AddTransient<IRoleStore<TRole>, RoleStore<TRole, IdentityDriverProvider, TKey>>();
-
+            ext.Services.AddSingleton<IdentityDriverProvider>(provider=>new InternalDriverProvider(options.Uri, options.Token,options.Configuration, provider.GetRequiredService<N4pperManager>()));
+            
             return ext;
         }
     }
