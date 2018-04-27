@@ -99,7 +99,7 @@ namespace N4pper.AspnetIdentity
                 Node n = new Node("p",type: typeof(TRole));
                 TRole tmp = await session.AsAsync(s=>s.ExecuteQuery<TRole>(
                     $"CREATE {n} " +
-                    $"SET p+=$role, p.{nameof(role.EntityId)}=id(p) " +
+                    $"SET p+=$role, p.{nameof(role.EntityId)}=id(p), p :{typeof(TRole).Name} " +
                     $"RETURN p",
                     new { role = role.ExludeProperties(p=>p.EntityId) }).FirstOrDefault(), 
                     cancellationToken);
@@ -277,7 +277,7 @@ namespace N4pper.AspnetIdentity
                 await session.RunAsync(
                     $"MATCH (n{n.Labels} {{{nameof(IdentityRole.Id)}:${nameof(roleId)}}}) " +
                     $"CREATE (n)-{rel}->(c{c.Labels})" +
-                    $"SET c+=${nameof(claim)}, c.{nameof(IGraphEntity.EntityId)}=id(c)",
+                    $"SET c+=${nameof(claim)}, c.{nameof(IGraphEntity.EntityId)}=id(c), c :{typeof(IdentityClaim).Name}",
                     new { roleId, claim = iclaim.SelectProperties(p=>new { p.ClaimValue, p.ClaimType }) });
             }
         }

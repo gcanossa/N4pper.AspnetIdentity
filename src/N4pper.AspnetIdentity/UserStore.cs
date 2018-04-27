@@ -113,7 +113,7 @@ namespace N4pper.AspnetIdentity
                 Node n = new Node("p", type: typeof(TUser));
                 TUser tmp = await session.AsAsync(s=>s.ExecuteQuery<TUser>(
                     $"CREATE {n} " +
-                    $"SET p+=$user, p.{nameof(user.EntityId)}=id(p)" +
+                    $"SET p+=$user, p.{nameof(user.EntityId)}=id(p), p :{typeof(TUser).Name} " +
                     $"RETURN p",
                     new { user = user.ExludeProperties(p => p.EntityId) }).FirstOrDefault(),
                     cancellationToken);
@@ -466,7 +466,7 @@ namespace N4pper.AspnetIdentity
                         $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}}) " +
                         $"UNWIND ${nameof(claimsList)} as row " +
                         $"CREATE (n)-{rel}->(c{c.Labels})" +
-                        $"SET c+=row, c.{nameof(IGraphEntity.EntityId)}=id(c)",
+                        $"SET c+=row, c.{nameof(IGraphEntity.EntityId)}=id(c), c :{typeof(IdentityClaim).Name}",
                         new { userId, claimsList });
                 }
             }
@@ -591,7 +591,7 @@ namespace N4pper.AspnetIdentity
                 await session.RunAsync(
                     $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}}) " +
                     $"CREATE (n)-{rel}->(c{c.Labels})" +
-                    $"SET c+=${nameof(login)},c.{nameof(IGraphEntity.EntityId)}=id(c)",
+                    $"SET c+=${nameof(login)},c.{nameof(IGraphEntity.EntityId)}=id(c), c :{typeof(IdentityUserLogin).Name}",
                     new { userId, login = login.SelectProperties(typeof(UserLoginInfo)) });
             }
         }
@@ -821,7 +821,7 @@ namespace N4pper.AspnetIdentity
                 await session.RunAsync(
                     $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}}) " +
                     $"MERGE (n)-{rel}->(c{c.Labels} {{{nameof(IdentityUserToken.LoginProvider)}:${nameof(loginProvider)},{nameof(IdentityUserToken.Name)}:${nameof(name)},{nameof(IdentityUserToken.Value)}:${nameof(value)}}})" +
-                    $"ON CREATE SET c.{nameof(IGraphEntity.EntityId)}=id(c)",
+                    $"ON CREATE SET c.{nameof(IGraphEntity.EntityId)}=id(c), c :{typeof(IdentityUserToken).Name}",
                     new { userId, loginProvider, name, value });
             }
         }
