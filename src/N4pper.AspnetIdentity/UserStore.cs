@@ -592,7 +592,7 @@ namespace N4pper.AspnetIdentity
                     $"MATCH (n{n.Labels} {{{nameof(IdentityUser.Id)}:${nameof(userId)}}}) " +
                     $"CREATE (n)-{rel}->(c{c.Labels})" +
                     $"SET c+=${nameof(login)},c.{nameof(IGraphEntity.EntityId)}=id(c)",
-                    new { userId, login = login.ToPropDictionary() });
+                    new { userId, login = login.SelectProperties(typeof(UserLoginInfo)) });
             }
         }
 
